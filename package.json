@@ -7,8 +7,9 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "test": "node test/verify-fetch.js && node test/verify-engine.js && node test/verify-run.js"
+    "start": "node src/server.js",
+    "check:once": "node src/index.js",
+    "test": "node test/verify-fetch.js && node test/verify-engine.js && node test/verify-run.js && node test/verify-server.js"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.2",
