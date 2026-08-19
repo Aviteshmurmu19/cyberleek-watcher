@@ -1,11 +1,11 @@
 {
   "name": "cyberleek-watcher",
   "version": "1.0.0",
-  "description": "",
+  "description": "CYBERLEEK Solana on-chain leak watcher",
   "license": "ISC",
   "author": "",
   "type": "commonjs",
-  "main": "index.js",
+  "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "check:once": "node src/index.js",
