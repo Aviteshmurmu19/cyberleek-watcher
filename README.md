@@ -7,8 +7,8 @@ Lightweight Node.js watcher that monitors the CYBERLEEK Solana program for new l
 CYBERLEEK publishes leaks as on-chain Solana accounts under program `7rAgHPLDc9NryZmNdeEzyDui6D9PHkvTxMjKhNSa7w3a`. Each new leak creates a new immutable account.
 
 This watcher runs as a lightweight HTTP microservice:
-1. **`GET /health`** — Instant health check (`200 OK`).
-2. **`GET /check`** — Runs the full watcher pipeline:
+1. **`GET /health`** - Instant health check (`200 OK`).
+2. **`GET /check`** - Runs the full watcher pipeline:
    - Fetches on-chain program accounts via Solana JSON-RPC.
    - Decodes 7156-byte binary Borsh-like payloads.
    - Diffs against persisted state (Upstash Redis or local fallback).
@@ -22,7 +22,7 @@ An external free cron scheduler (**cron-job.org**) pings `/check` every **60 sec
 - **RPC Method**: `getProgramAccounts` with filters (`memcmp` at offset 0: `G6JNBZ2BSey`, `dataSize`: `7156`)
 - **Encoding**: `base64`
 - **Account Binary Size**: `7156` bytes
-- **Execution Time**: ~800–1000ms per poll
+- **Execution Time**: ~800-1000ms per poll
 - **Response Size**: ~76 KB per poll
 
 ### Account Binary Layout
@@ -106,10 +106,10 @@ npm test
 ```
 
 Includes:
-- `test/verify-fetch.js` — Live Solana mainnet account query and decoding.
-- `test/verify-engine.js` — State bootstrapping, duplicate suppression, and mock leak diffing.
-- `test/verify-run.js` — End-to-end bootstrap and no-op run lifecycle.
-- `test/verify-server.js` — HTTP server routes, status codes, and JSON responses.
+- `test/verify-fetch.js` - Live Solana mainnet account query and decoding.
+- `test/verify-engine.js` - State bootstrapping, duplicate suppression, and mock leak diffing.
+- `test/verify-run.js` - End-to-end bootstrap and no-op run lifecycle.
+- `test/verify-server.js` - HTTP server routes, status codes, and JSON responses.
 
 Test live Discord alert delivery:
 ```bash
