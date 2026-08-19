@@ -1,3 +1,5 @@
+# DISCLAIMER: This app has no affiliation with CYBERLEEK or ROCKSTAR Nor does it hold any leaked or copyright content, it simply makes requests on the solana blockchain
+
 # CYBERLEEK Watcher
 
 Lightweight Node.js watcher that monitors the CYBERLEEK Solana program for new leak accounts and sends rich Discord notifications. Designed for a 100% free ($0/mo) deployment on **Render Free Web Service + cron-job.org**.
