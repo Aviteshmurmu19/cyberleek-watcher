@@ -33,12 +33,16 @@ function createServer() {
   return server;
 }
 
-if (require.main === module) {
-  const PORT = process.env.PORT || 3000;
+function startServer(port = process.env.PORT || 3000) {
   const server = createServer();
-  server.listen(PORT, '0.0.0.0', () => {
-    logger.info({ port: PORT }, 'Cyberleek Watcher HTTP server listening');
+  server.listen(port, '0.0.0.0', () => {
+    logger.info({ port }, 'Cyberleek Watcher HTTP server listening');
   });
+  return server;
 }
 
-module.exports = { createServer };
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { createServer, startServer };
