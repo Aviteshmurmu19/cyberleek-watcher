@@ -1,110 +1,150 @@
 # CYBERLEEK Watcher
 
-Lightweight Node.js watcher that monitors the CYBERLEEK Solana program for new leak accounts and sends Discord notifications. Designed for Render Free tier deployment.
+Lightweight Node.js watcher that monitors the CYBERLEEK Solana program for new leak accounts and sends rich Discord notifications. Designed for a 100% free ($0/mo) deployment on **Render Free Web Service + cron-job.org**.
 
-## How it works
+## How It Works
 
-CYBERLEEK publishes leak data as on-chain Solana accounts under program `7rAgHPLDc9NryZmNdeEzyDui6D9PHkvTxMjKhNSa7w3a`. Each new leak creates a new content account. This watcher polls those accounts, diffs them against stored state, and alerts via Discord webhook when new content appears.
+CYBERLEEK publishes leaks as on-chain Solana accounts under program `7rAgHPLDc9NryZmNdeEzyDui6D9PHkvTxMjKhNSa7w3a`. Each new leak creates a new immutable account.
 
-### Data path
+This watcher runs as a lightweight HTTP microservice:
+1. **`GET /health`** — Instant health check (`200 OK`).
+2. **`GET /check`** — Runs the full watcher pipeline:
+   - Fetches on-chain program accounts via Solana JSON-RPC.
+   - Decodes 7156-byte binary Borsh-like payloads.
+   - Diffs against persisted state (Upstash Redis or local fallback).
+   - Dispatches rich embed notifications to Discord if new leaks are detected.
+   - Returns execution results as JSON.
 
-- RPC: `getProgramAccounts` with `memcmp` + `dataSize` filters
-- Encoding: `base64`
-- Account size: `7156` bytes
-- Poll interval: `60` seconds
-- Response size: ~`76 KB` per poll
+An external free cron scheduler (**cron-job.org**) pings `/check` every **60 seconds**, which keeps the Render Free instance awake 24/7 (preventing the 15-minute idle sleep) and executes checks on a strict 1-minute schedule.
 
-### Account binary layout
+### Data Path Specifications
+- **Solana Program ID**: `7rAgHPLDc9NryZmNdeEzyDui6D9PHkvTxMjKhNSa7w3a`
+- **RPC Method**: `getProgramAccounts` with filters (`memcmp` at offset 0: `G6JNBZ2BSey`, `dataSize`: `7156`)
+- **Encoding**: `base64`
+- **Account Binary Size**: `7156` bytes
+- **Execution Time**: ~800–1000ms per poll
+- **Response Size**: ~76 KB per poll
 
-- Bytes `0..7`: discriminator (skip)
-- Bytes `8..39`: authority pubkey
-- Bytes `40..47`: `i64 LE` timestamp (Unix seconds)
+### Account Binary Layout
+- Bytes `0..7`: 8-byte discriminator (skip)
+- Bytes `8..39`: 32-byte authority pubkey
+- Bytes `40..47`: `i64 LE` creation timestamp (Unix seconds)
 - Bytes `48..51`: `u32 LE` title length
-- Bytes `52..`: UTF-8 title
-- Then: `u32 LE` item count, followed by `{ label, url }` pairs
+- Bytes `52..(52+len)`: UTF-8 string title
+- Next 4 bytes: `u32 LE` item count
+- Per item: `u32 LE` label length → UTF-8 string → `u32 LE` url length → UTF-8 string
 
-## Project structure
+---
+
+## Project Structure
 
 ```text
-src/
-├── config.js       # Environment variables & defaults
-├── logger.js       # Pino logger
-├── decoder.js      # Binary account buffer parser
-├── fetcher.js      # Solana RPC getProgramAccounts client
-├── store.js        # Upstash Redis + local file fallback
-├── engine.js       # Bootstrap & diff detection
-├── notifier.js     # Discord webhook embed sender
-└── index.js        # Main orchestrator
-
-test/
-├── verify-fetch.js
-├── verify-engine.js
-├── verify-run.js
-└── test-discord.js
+├── index.js             # Root entry point (boots HTTP server)
+├── src/
+│   ├── config.js        # Environment variables & default constants
+│   ├── logger.js        # Structured Pino logger
+│   ├── decoder.js       # Binary account buffer parser
+│   ├── fetcher.js       # Solana RPC getProgramAccounts client
+│   ├── store.js         # Upstash Redis REST + Local File fallback
+│   ├── engine.js        # Bootstrap & diff detection engine
+│   ├── notifier.js      # Discord webhook rich embed sender
+│   ├── server.js        # Native HTTP server (/health, /check)
+│   └── index.js         # Core orchestrator & CLI runner
+├── test/
+│   ├── verify-fetch.js  # Verifies live Solana RPC fetch & decode
+│   ├── verify-engine.js # Verifies diff engine & state storage logic
+│   ├── verify-run.js    # Verifies end-to-end execution lifecycle
+│   ├── verify-server.js # Verifies HTTP endpoints (/health, /check)
+│   └── test-discord.js  # Live test embed delivery to Discord
+├── .env.example
+├── package.json
+└── AGENTS.md            # Agent context & architectural decisions
 ```
 
-## Setup
+---
+
+## Setup & Local Development
 
 ```bash
+# 1. Install dependencies
 npm install
+
+# 2. Configure environment
 cp .env.example .env
 ```
 
-Edit `.env` with your secrets.
-
-## Configuration
-
-| Variable | Default | Description |
-|---|---|---|
-| `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint |
-| `DISCORD_WEBHOOK_URL` | `''` | Discord webhook for alerts |
-| `UPSTASH_REDIS_REST_URL` | `''` | Upstash Redis URL (optional) |
-| `UPSTASH_REDIS_REST_TOKEN` | `''` | Upstash Redis token (optional) |
-| `STATE_KEY` | `cyberleek:state` | Redis state key |
-| `LOCAL_STATE_PATH` | `./data/state.json` | Local fallback state file |
-| `LOG_LEVEL` | `info` | Pino log level |
-
-State persistence:
-- If `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set, uses Upstash Redis.
-- Otherwise falls back to `LOCAL_STATE_PATH` on the local filesystem.
-
-## Usage
-
-```bash
-npm start
+Edit `.env` with your credentials:
+```env
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+UPSTASH_REDIS_REST_URL=https://....upstash.io
+UPSTASH_REDIS_REST_TOKEN=...
+STATE_KEY=cyberleek:state
+LOG_LEVEL=info
 ```
 
-First run bootstraps state from all current on-chain accounts without sending alerts. Subsequent runs only notify for new accounts.
+### Running Locally
+
+- **Start HTTP Web Server**:
+  ```bash
+  npm start
+  ```
+  Listens on `http://localhost:3000`. Test via `http://localhost:3000/check`.
+
+- **Run Single CLI Check**:
+  ```bash
+  npm run check:once
+  ```
+
+---
 
 ## Testing
 
+Run all 4 automated test suites:
 ```bash
 npm test
 ```
 
-Runs:
-- `verify-fetch.js` — live fetch + decode from mainnet
-- `verify-engine.js` — bootstrap, duplicate detection, mock new account, local store round-trip
-- `verify-run.js` — end-to-end lifecycle: bootstrap then no-op
+Includes:
+- `test/verify-fetch.js` — Live Solana mainnet account query and decoding.
+- `test/verify-engine.js` — State bootstrapping, duplicate suppression, and mock leak diffing.
+- `test/verify-run.js` — End-to-end bootstrap and no-op run lifecycle.
+- `test/verify-server.js` — HTTP server routes, status codes, and JSON responses.
 
-Live Discord webhook test:
+Test live Discord alert delivery:
 ```bash
 node test/test-discord.js
 ```
 
-## Deployment
+---
 
-Recommended: Render Free **Cron Job**.
+## Deployment (Render + cron-job.org)
 
-- Schedule: `*/1 * * * *` (every 1 minute)
-- Set `DISCORD_WEBHOOK_URL` and `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` in Render env vars
-- Command: `npm start`
+### 1. Render Web Service (Free Tier)
+1. In Render Dashboard, click **New +** → **Web Service**.
+2. Connect your Git repository.
+3. Settings:
+   - **Environment**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Instance Type**: `Free` ($0/mo)
+4. Add your Environment Variables (`DISCORD_WEBHOOK_URL`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, etc.).
+5. Deploy. You will receive a URL like `https://cyberleek-watcher.onrender.com`.
 
-Why cron over web service: no sleep, no cold starts, no UptimeRobot dependency.
+### 2. cron-job.org (Free 1-Minute Scheduler)
+1. Sign up at [cron-job.org](https://cron-job.org) (Free).
+2. Click **Create Cronjob**:
+   - **URL**: `https://cyberleek-watcher.onrender.com/check`
+   - **Schedule**: Every **1 minute** (`* * * * *`)
+   - **Request Method**: `GET`
+   - **Save responses in job history**: Checked
+3. Save the job.
 
-## Caveats
+---
 
-- Render Free tier outbound bandwidth limit: `5 GB/month`. At 1-minute polling this uses ~`3.2 GB/month`.
-- SMTP is blocked on Render Free; this project uses Discord webhook over HTTPS.
-- Solana Labs public RPC limits: `100 req/10s` per IP, `40 req/10s` per method. At `1 req/60s` this is well within limits.
-- Render Free cron pricing may vary. Verify in the Render dashboard before production.
+## Architecture Highlights
+
+- **Immune to Frontend Downtime**: Does not scrape the Arweave frontend (`https://cyberleek.ar.io/`). It queries the Solana blockchain directly via JSON-RPC.
+- **Zero Idle Spindown**: 1-minute cron pings keep the Render Free web service permanently awake (<15 min idle limit).
+- **Zero Historical Spam**: State baseline is absorbed silently on first run; only net-new accounts trigger Discord embeds.
+- **100% Free**: Operates comfortably within Render Free, Upstash Redis Free, cron-job.org Free, and Discord Webhook limits.
